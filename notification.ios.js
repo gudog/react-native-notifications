@@ -1,3 +1,7 @@
+"use strict";
+import { NativeModules } from "react-native";
+const RNNotifications = NativeModules.RNNotifications;
+
 export default class IOSNotification {
   _data: Object;
   _alert: string | Object;
@@ -6,16 +10,19 @@ export default class IOSNotification {
   _category: string;
   _type: string; // regular / managed
   _thread: string;
+  _finishCalled: boolean;
 
   constructor(notification: Object) {
     this._data = {};
 
-    if (notification.aps &&
+    if (
+      notification.aps &&
       notification.aps["content-available"] &&
       notification.aps["content-available"] === 1 &&
       !notification.aps.alert &&
       !notification.aps.sound &&
-      notification.managedAps) {
+      notification.managedAps
+    ) {
       // managed notification
       this._alert = notification.managedAps.alert;
       this._sound = notification.managedAps.sound;
@@ -23,9 +30,7 @@ export default class IOSNotification {
       this._category = notification.managedAps.category;
       this._type = "managed";
       this._thread = notification.aps["thread-id"];
-    } else if (
-      notification.aps &&
-      notification.aps.alert) {
+    } else if (notification.aps && notification.aps.alert) {
       // regular notification
       this._alert = notification.aps.alert;
       this._sound = notification.aps.sound;
@@ -35,9 +40,12 @@ export default class IOSNotification {
       this._thread = notification.aps["thread-id"];
     }
 
-    Object.keys(notification).filter(key => key !== "aps").forEach(key => {
-      this._data[key] = notification[key];
-    });
+    Object.keys(notification)
+      .filter(key => key !== "aps")
+      .forEach(key => {
+        this._data[key] = notification[key];
+      });
+    this._finishCalled = false;
   }
 
   getMessage(): ?string | ?Object {
@@ -67,4 +75,24 @@ export default class IOSNotification {
   getThread(): ?string {
     return this._thread;
   }
+
+  finish(finishResult) {
+    if (!this._finishCalled && this._data._completionHandlerId) {
+      this._finishCalled = true;
+      const result = finishResult || REMOTE_NOTIFICATION_RESULT.NoData;
+      if (!Object.values(REMOTE_NOTIFICATION_RESULT).includes(result)) {
+        throw new Error("Invalid REMOTE_NOTIFICATION_RESULT value");
+      }
+      RNNotifications.finishRemoteNotification(
+        this._data._completionHandlerId,
+        result
+      );
+    }
+  }
 }
+
+export const REMOTE_NOTIFICATION_RESULT = {
+  NewData: "NewData",
+  NoData: "NoData",
+  Failed: "Failed"
+};
